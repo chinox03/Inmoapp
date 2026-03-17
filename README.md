@@ -230,9 +230,9 @@ Los siguientes módulos tienen rutas y navegación configuradas, pero mostrarán
 ## Soporte
 
 Para dudas o problemas técnicos:
-- Email: admin@conversion.tech
+- Email: info@dharma502.com
 - Documentación: Ver archivos `DATABASE_SETUP.md` y `CREDENTIALS.md`
 
 ## Licencia
 
-Propiedad de InmoAPP. Todos los derechos reservados.
+Propiedad de Dharma Guatemala. Todos los derechos reservados.
