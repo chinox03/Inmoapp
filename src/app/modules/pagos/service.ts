@@ -1,7 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { Pago, User } from '../../../types/database.types';
 import { logAuditEvent } from '../../../lib/audit';
-import { shouldBypassFilters } from '../../../config/devMode';
 
 export async function getPagos() {
   try {

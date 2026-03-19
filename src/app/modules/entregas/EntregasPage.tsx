@@ -102,7 +102,7 @@ export default function EntregasPage() {
         estado: ticket.status,
         prioridad: ticket.priority,
         items_pendientes: ticket.pendingItems,
-      });
+      }, user);
     }
 
     setShowFormModal(false);

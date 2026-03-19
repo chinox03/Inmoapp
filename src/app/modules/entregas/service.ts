@@ -1,6 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { Profile } from '../../../types/database.types';
-import { shouldBypassFilters } from '../../../config/devMode';
+import { logAuditEvent } from '../../../lib/audit';
 
 export interface EntregaDB {
   id: string;
@@ -54,6 +54,7 @@ export async function getEntregaTickets(): Promise<EntregaTicketDB[]> {
   const { data, error } = await supabase
     .from('entregas_tickets')
     .select('*')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -94,6 +95,16 @@ export async function createEntrega(
     return { success: false, error: error.message };
   }
 
+  if (data) {
+    await logAuditEvent({
+      residencialId: entrega.residencial_id || undefined,
+      userId: user.id,
+      entidad: 'entregas',
+      entidadId: data.id,
+      accion: 'CREATE',
+    });
+  }
+
   return { success: true, data };
 }
 
@@ -105,7 +116,8 @@ export async function createEntregaTicket(
     estado: string;
     prioridad: string;
     items_pendientes: string[];
-  }
+  },
+  user: Profile | null
 ) {
   const { data, error } = await supabase
     .from('entregas_tickets')
@@ -116,6 +128,15 @@ export async function createEntregaTicket(
   if (error) {
     console.error('Error creating entrega ticket:', error);
     return { success: false, error: error.message };
+  }
+
+  if (data && user) {
+    await logAuditEvent({
+      userId: user.id,
+      entidad: 'entregas_tickets',
+      entidadId: data.id,
+      accion: 'CREATE',
+    });
   }
 
   return { success: true, data };
@@ -138,6 +159,13 @@ export async function deleteEntrega(
     console.error('Error deleting entrega:', error);
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'entregas',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

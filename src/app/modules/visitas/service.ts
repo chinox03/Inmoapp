@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { logAuditEvent } from '../../../lib/audit';
 import { Visit, VisitFormData } from './types';
 
 interface DbVisit {
@@ -105,6 +106,13 @@ export async function addVisit(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    userId: registeredBy,
+    entidad: 'visitas',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data: mapDbToVisit(data) };
 }
 
@@ -138,7 +146,8 @@ export async function getVisitById(visitId: string): Promise<Visit | null> {
 }
 
 export async function deleteVisit(
-  id: string
+  id: string,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   const { error } = await supabase
     .from('visitas')
@@ -148,6 +157,13 @@ export async function deleteVisit(
   if (error) {
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    userId,
+    entidad: 'visitas',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

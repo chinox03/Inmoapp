@@ -1,5 +1,5 @@
 import { supabase } from '../../../lib/supabase';
-import { shouldBypassFilters } from '../../../config/devMode';
+import { logAuditEvent } from '../../../lib/audit';
 import { Profile } from '../../../types/database.types';
 
 export interface Mudanza {
@@ -30,16 +30,10 @@ export async function getMudanzas(
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
-  const devBypass = shouldBypassFilters() || user?.rol === 'SUPERADMIN';
-
-  if (!devBypass) {
-    if (user.rol === 'RESIDENTE') {
-      query = query.eq('residente_id', user.id);
-    } else if (residencialId && typeof residencialId === 'string' && residencialId.length > 10) {
-      query = query.eq('residencial_id', residencialId);
-    }
-  } else {
-    query = query.not('id', 'is', null);
+  if (user.rol === 'RESIDENTE') {
+    query = query.eq('residente_id', user.id);
+  } else if (user.rol !== 'SUPERADMIN' && residencialId && typeof residencialId === 'string' && residencialId.length > 10) {
+    query = query.eq('residencial_id', residencialId);
   }
 
   const { data, error } = await query;
@@ -71,6 +65,14 @@ export async function createMudanza(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    residencialId: mudanza.residencial_id,
+    userId: user.id,
+    entidad: 'mudanzas',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data };
 }
 
@@ -98,6 +100,14 @@ export async function updateMudanza(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'mudanzas',
+    entidadId: id,
+    accion: 'UPDATE',
+    diff: cleanUpdates,
+  });
+
   return { success: true, data };
 }
 
@@ -112,6 +122,13 @@ export async function deleteMudanza(id: string, user: Profile | null) {
     console.error('Error deleting mudanza:', error);
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'mudanzas',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

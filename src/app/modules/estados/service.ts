@@ -1,7 +1,6 @@
 import { supabase } from '../../../lib/supabase';
 import { EstadoCuenta, User } from '../../../types/database.types';
 import { logAuditEvent } from '../../../lib/audit';
-import { shouldBypassFilters } from '../../../config/devMode';
 
 export async function getEstadosCuenta(
   user: User | null,
@@ -12,16 +11,13 @@ export async function getEstadosCuenta(
   let query = supabase
     .from('estados_cuenta')
     .select('*')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
-  const devBypass = shouldBypassFilters() || user?.rol === 'SUPERADMIN';
-
-  if (!devBypass) {
-    if (user.rol === 'RESIDENTE') {
-      query = query.eq('residente_id', user.id);
-    } else if (selectedResidencialId && selectedResidencialId.length > 10) {
-      query = query.eq('residencial_id', selectedResidencialId);
-    }
+  if (user.rol === 'RESIDENTE') {
+    query = query.eq('residente_id', user.id);
+  } else if (user.rol !== 'SUPERADMIN' && selectedResidencialId && selectedResidencialId.length > 10) {
+    query = query.eq('residencial_id', selectedResidencialId);
   }
 
   const { data, error } = await query;

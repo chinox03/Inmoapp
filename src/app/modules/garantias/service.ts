@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { logAuditEvent } from '../../../lib/audit';
 import { Profile } from '../../../types/database.types';
 
 export interface GarantiaDB {
@@ -76,6 +77,14 @@ export async function createGarantia(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    residencialId: garantia.residencial_id ?? undefined,
+    userId: user.id,
+    entidad: 'garantias',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data };
 }
 
@@ -102,6 +111,14 @@ export async function updateGarantia(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'garantias',
+    entidadId: id,
+    accion: 'UPDATE',
+    diff: cleanUpdates,
+  });
+
   return { success: true, data };
 }
 
@@ -122,6 +139,13 @@ export async function deleteGarantia(
     console.error('Error deleting garantia:', error);
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'garantias',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

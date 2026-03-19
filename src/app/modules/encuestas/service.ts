@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { logAuditEvent } from '../../../lib/audit';
 import { Encuesta, RespuestaEncuesta } from './types';
 
 interface DbEncuesta {
@@ -86,6 +87,13 @@ export async function addEncuesta(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    residencialId: encuesta.residencial_id || undefined,
+    entidad: 'encuestas',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data: mapDbToEncuesta(data) };
 }
 
@@ -100,6 +108,12 @@ export async function deleteEncuesta(
   if (error) {
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    entidad: 'encuestas',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

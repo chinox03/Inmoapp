@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { Profile } from '../types/database.types';
-import { shouldBypassFilters } from '../config/devMode';
 
 export const applyResidencialFilter = (
   query: any,
@@ -8,10 +7,6 @@ export const applyResidencialFilter = (
   residencialId?: string
 ) => {
   if (!user) return query;
-
-  if (shouldBypassFilters()) {
-    return query;
-  }
 
   if (user.rol === 'SUPERADMIN') {
     if (residencialId) {
@@ -32,10 +27,6 @@ export const applyResidenteFilter = (
   user: Profile | null
 ) => {
   if (!user) return query;
-
-  if (shouldBypassFilters()) {
-    return query;
-  }
 
   if (user.rol === 'RESIDENTE') {
     return query.eq('residente_id', user.id);
@@ -129,7 +120,7 @@ export async function deleteRecord(
 
   const { error } = await supabase
     .from(tableName)
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', id);
 
   if (error) {

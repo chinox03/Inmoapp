@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { logAuditEvent } from '../../../lib/audit';
 import { z } from 'zod';
 
 export interface NegocioActivity {
@@ -101,6 +102,12 @@ export async function createNegocio(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    entidad: 'negocios',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data };
 }
 
@@ -117,6 +124,13 @@ export async function updateNegocio(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    entidad: 'negocios',
+    entidadId: id,
+    accion: 'UPDATE',
+    diff: updates,
+  });
+
   return { success: true };
 }
 
@@ -131,6 +145,12 @@ export async function deleteNegocio(
   if (error) {
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    entidad: 'negocios',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

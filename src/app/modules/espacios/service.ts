@@ -1,5 +1,5 @@
 import { supabase } from '../../../lib/supabase';
-import { shouldBypassFilters } from '../../../config/devMode';
+import { logAuditEvent } from '../../../lib/audit';
 import { Profile } from '../../../types/database.types';
 import { fetchWithFilter, createRecord, updateRecord } from '../../../lib/dataService';
 
@@ -24,54 +24,7 @@ export async function getEspacios(
 ): Promise<Espacio[]> {
   const data = await fetchWithFilter<Espacio>('espacios', user, residencialId);
 
-  if (!data || data.length === 0) {
-    return [
-      {
-        id: 'esp1',
-        residencial_id: 'demo-residencial',
-        nombre: 'Salon Social',
-        descripcion: 'Amplio salon para eventos sociales con capacidad para 50 personas',
-        capacidad: 50,
-        amueblado: true,
-        electricidad: true,
-        dias_disponibles: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'],
-        horas_disponibles: ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'],
-        estado: 'activo',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        id: 'esp2',
-        residencial_id: 'demo-residencial',
-        nombre: 'Area de BBQ',
-        descripcion: 'Area de parrilladas con 3 grills disponibles',
-        capacidad: 30,
-        amueblado: false,
-        electricidad: true,
-        dias_disponibles: ['sabado', 'domingo'],
-        horas_disponibles: ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'],
-        estado: 'activo',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      {
-        id: 'esp3',
-        residencial_id: 'demo-residencial',
-        nombre: 'Piscina',
-        descripcion: 'Piscina semi-olimpica con area para ninos',
-        capacidad: 40,
-        amueblado: false,
-        electricidad: false,
-        dias_disponibles: ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'],
-        horas_disponibles: ['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'],
-        estado: 'activo',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-    ];
-  }
-
-  return data;
+  return data || [];
 }
 
 export async function createEspacio(
@@ -102,6 +55,13 @@ export async function deleteEspacio(id: string, user: Profile | null) {
   if (error) {
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'espacios',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

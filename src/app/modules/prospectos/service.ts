@@ -1,4 +1,5 @@
 import { supabase } from '../../../lib/supabase';
+import { logAuditEvent } from '../../../lib/audit';
 import { z } from 'zod';
 
 export interface Prospecto {
@@ -63,6 +64,12 @@ export async function createProspecto(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    entidad: 'prospectos',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data };
 }
 
@@ -79,6 +86,13 @@ export async function updateProspecto(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    entidad: 'prospectos',
+    entidadId: id,
+    accion: 'UPDATE',
+    diff: updates,
+  });
+
   return { success: true };
 }
 
@@ -93,6 +107,12 @@ export async function deleteProspecto(
   if (error) {
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    entidad: 'prospectos',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }

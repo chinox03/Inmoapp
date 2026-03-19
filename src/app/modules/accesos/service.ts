@@ -1,5 +1,5 @@
 import { supabase } from '../../../lib/supabase';
-import { shouldBypassFilters } from '../../../config/devMode';
+import { logAuditEvent } from '../../../lib/audit';
 import { Profile } from '../../../types/database.types';
 
 export interface Acceso {
@@ -27,12 +27,8 @@ export async function getAccesos(
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
-  const devBypass = shouldBypassFilters() || user?.rol === 'SUPERADMIN';
-
-  if (!devBypass) {
-    if (user.rol === 'RESIDENTE') {
-      query = query.eq('residente_id', user.id);
-    }
+  if (user.rol === 'RESIDENTE') {
+    query = query.eq('residente_id', user.id);
   }
 
   const { data, error } = await query;
@@ -63,6 +59,13 @@ export async function createAcceso(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'accesos',
+    entidadId: data.id,
+    accion: 'CREATE',
+  });
+
   return { success: true, data };
 }
 
@@ -87,6 +90,14 @@ export async function updateAcceso(
     return { success: false, error: error.message };
   }
 
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'accesos',
+    entidadId: id,
+    accion: 'UPDATE',
+    diff: updates,
+  });
+
   return { success: true, data };
 }
 
@@ -101,6 +112,13 @@ export async function deleteAcceso(id: string, user: Profile | null) {
     console.error('Error deleting acceso:', error);
     return { success: false, error: error.message };
   }
+
+  await logAuditEvent({
+    userId: user.id,
+    entidad: 'accesos',
+    entidadId: id,
+    accion: 'DELETE',
+  });
 
   return { success: true };
 }
