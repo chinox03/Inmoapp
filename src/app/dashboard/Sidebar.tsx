@@ -75,19 +75,82 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+interface MobileSectionItemProps {
+  section: NavSection;
+  sectionItems: NavigationItem[];
+  currentPath: string;
+  onClose: () => void;
+}
+
+function MobileSectionItem({ section, sectionItems, currentPath, onClose }: MobileSectionItemProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
+      >
+        <div className="flex items-center space-x-3">
+          <section.icon className="h-5 w-5" />
+          <span>{section.label}</span>
+        </div>
+        <ChevronRight
+          className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+        />
+      </button>
+      {isExpanded && (
+        <ul className="mt-1 space-y-0.5 ml-2">
+          {sectionItems.map((item, index) => {
+            const Icon = item.icon;
+            const isActive =
+              currentPath === item.path ||
+              (item.path !== '/dashboard' && currentPath.startsWith(item.path));
+            return (
+              <li key={`mobile-${item.path}-${item.label}-${index}`}>
+                <Link
+                  to={item.path}
+                  onClick={onClose}
+                  className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors ${
+                    isActive
+                      ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 font-medium'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 flex-shrink-0" />
+                  <span className="flex-1 text-sm">{item.label}</span>
+                  {item.readOnly && <Badge variant="warning">Solo lectura</Badge>}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function Sidebar({ isMobileOpen, onClose, isCollapsed, onToggleCollapse }: SidebarProps) {
   const { user } = useAuth();
   const location = useLocation();
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
-    const saved = localStorage.getItem('sidebarCollapsedSections');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
+    try {
+      const saved = localStorage.getItem('sidebarCollapsedSections');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
   });
   const flyoutRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('sidebarCollapsedSections', JSON.stringify([...collapsedSections]));
+    try {
+      localStorage.setItem('sidebarCollapsedSections', JSON.stringify([...collapsedSections]));
+    } catch {
+      // localStorage unavailable (e.g. restricted iframe)
+    }
   }, [collapsedSections]);
 
   const filteredNavItems = NAVIGATION_ITEMS.filter((item) =>
@@ -493,54 +556,14 @@ export function Sidebar({ isMobileOpen, onClose, isCollapsed, onToggleCollapse }
                 section.items.includes(item.path)
               );
               if (sectionItems.length === 0) return null;
-
-              const [isSectionExpanded, setIsSectionExpanded] = useState(false);
-
               return (
-                <div key={`mobile-${section.id}`} className="mb-1">
-                  <button
-                    onClick={() => setIsSectionExpanded(!isSectionExpanded)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <section.icon className="h-5 w-5" />
-                      <span>{section.label}</span>
-                    </div>
-                    <ChevronRight
-                      className={`h-4 w-4 transition-transform ${
-                        isSectionExpanded ? 'rotate-90' : ''
-                      }`}
-                    />
-                  </button>
-                  {isSectionExpanded && (
-                    <ul className="mt-1 space-y-0.5 ml-2">
-                      {sectionItems.map((item, index) => {
-                        const Icon = item.icon;
-                        const isActive =
-                          location.pathname === item.path ||
-                          (item.path !== '/dashboard' &&
-                            location.pathname.startsWith(item.path));
-                        return (
-                          <li key={`mobile-${item.path}-${item.label}-${index}`}>
-                            <Link
-                              to={item.path}
-                              onClick={onClose}
-                              className={`flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors ${
-                                isActive
-                                  ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-400 font-medium'
-                                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                              }`}
-                            >
-                              <Icon className="h-5 w-5 flex-shrink-0" />
-                              <span className="flex-1 text-sm">{item.label}</span>
-                              {item.readOnly && <Badge variant="warning">Solo lectura</Badge>}
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
+                <MobileSectionItem
+                  key={`mobile-${section.id}`}
+                  section={section}
+                  sectionItems={sectionItems}
+                  currentPath={location.pathname}
+                  onClose={onClose}
+                />
               );
             })}
           </div>

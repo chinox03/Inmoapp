@@ -7,12 +7,20 @@ export function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
-    const saved = localStorage.getItem('sidebarCollapsed');
-    return saved ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      return saved ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
   });
 
   useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed));
+    try {
+      localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed));
+    } catch {
+      // localStorage unavailable (e.g. restricted iframe)
+    }
   }, [isSidebarCollapsed]);
 
   const toggleSidebar = () => {
