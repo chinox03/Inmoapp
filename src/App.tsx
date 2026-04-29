@@ -33,6 +33,7 @@ const ReservasComercialesPage = React.lazy(() => import('./app/modules/reservas-
 const PCVPage = React.lazy(() => import('./app/modules/pcv/PCVPage').then(m => ({ default: m.PCVPage })));
 const ComisionesPage = React.lazy(() => import('./app/modules/comisiones/ComisionesPage').then(m => ({ default: m.ComisionesPage })));
 const InsightsPage = React.lazy(() => import('./app/modules/insights/InsightsPage').then(m => ({ default: m.InsightsPage })));
+const MantenimientoPage = React.lazy(() => import('./app/modules/mantenimiento/MantenimientoPage').then(m => ({ default: m.MantenimientoPage })));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full min-h-[200px]">
@@ -120,6 +121,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRoles={['SUPERADMIN', 'ADMIN_RESIDENCIAL']}>
                     <Suspense fallback={<PageLoader />}><InsightsPage /></Suspense>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="mantenimiento"
+                element={
+                  <ProtectedRoute requiredRoles={['SUPERADMIN', 'ADMIN_RESIDENCIAL']}>
+                    <Suspense fallback={<PageLoader />}><MantenimientoPage /></Suspense>
                   </ProtectedRoute>
                 }
               />

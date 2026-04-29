@@ -1,5 +1,5 @@
 import { UserRole } from '../types/database.types';
-import { Home, Building2, Users, FileText, Receipt, CreditCard, AlertTriangle, Calendar, KeyRound, Truck, Phone, UserCheck, PackageCheck, Shield, UserPlus, Briefcase, ClipboardCheck, FileSignature, DollarSign, BarChart3 } from 'lucide-react';
+import { Home, Building2, Users, FileText, Receipt, CreditCard, AlertTriangle, Calendar, KeyRound, Truck, Phone, UserCheck, PackageCheck, Shield, UserPlus, Briefcase, ClipboardCheck, Ligature as FileSignature, DollarSign, BarChart3, Wrench } from 'lucide-react';
 
 export interface NavigationItem {
   label: string;
@@ -190,6 +190,12 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
     label: 'Insights',
     path: '/dashboard/insights',
     icon: BarChart3,
+    roles: ['SUPERADMIN', 'ADMIN_RESIDENCIAL'],
+  },
+  {
+    label: 'Mantenimiento',
+    path: '/dashboard/mantenimiento',
+    icon: Wrench,
     roles: ['SUPERADMIN', 'ADMIN_RESIDENCIAL'],
   },
 ];

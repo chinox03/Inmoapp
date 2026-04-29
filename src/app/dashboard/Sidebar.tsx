@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { NAVIGATION_ITEMS, NavigationItem } from '../../utils/constants';
-import { Building2, X, ChevronRight, ChevronDown, LayoutGrid, Users, FolderKanban, PanelLeftClose, PanelLeftOpen, TrendingUp } from 'lucide-react';
+import { Building2, X, ChevronRight, ChevronDown, LayoutGrid, Users, FolderKanban, PanelLeftClose, PanelLeftOpen, TrendingUp, Wrench } from 'lucide-react';
 import { Badge } from '../../components/ui/Badge';
 
 interface SidebarProps {
@@ -71,6 +71,14 @@ const NAV_SECTIONS: NavSection[] = [
       '/dashboard/usuarios',
       '/dashboard/auditoria',
       '/dashboard/residenciales',
+    ],
+  },
+  {
+    id: 'maintenance',
+    label: 'Mantenimiento',
+    icon: Wrench,
+    items: [
+      '/dashboard/mantenimiento',
     ],
   },
 ];
