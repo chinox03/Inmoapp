@@ -29,6 +29,7 @@ export interface ReservaComercial {
   fecha_reserva: string;
   estado: ReservaComercialEstado;
   documentos: ReservaComercialDocument[];
+  documentos_requeridos: string[];
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +49,7 @@ export async function getReservasComerciales(): Promise<ReservaComercial[]> {
   return (data || []).map((d: Record<string, unknown>) => ({
     ...d,
     documentos: (d.documentos as ReservaComercialDocument[]) || [],
+    documentos_requeridos: (d.documentos_requeridos as string[]) || [],
   })) as ReservaComercial[];
 }
 
@@ -60,13 +62,17 @@ export async function createReservaComercial(input: {
   proyecto: string;
   tipo_interes: string;
   valor: number;
+  monto_reserva?: number;
+  documentos_requeridos?: string[];
 }): Promise<{ success: boolean; data?: ReservaComercial; error?: string }> {
+  const { documentos_requeridos, ...rest } = input;
   const record = {
-    ...input,
-    monto_reserva: 0,
+    ...rest,
+    monto_reserva: input.monto_reserva ?? 0,
     fecha_reserva: new Date().toISOString().split('T')[0],
     estado: 'Pendiente Documentos' as ReservaComercialEstado,
     documentos: [],
+    documentos_requeridos: documentos_requeridos || [],
   };
 
   const { data, error } = await supabase

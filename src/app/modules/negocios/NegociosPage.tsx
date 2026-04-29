@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Briefcase, Plus, Mail, Phone, MessageCircle, Building, Calendar, User, CheckCircle, FileText, StickyNote, Trash2 } from 'lucide-react';
+import { Briefcase, Plus, Mail, Phone, MessageCircle, Building, Calendar, User, CheckCircle, FileText, StickyNote, Trash2, DollarSign, AlertCircle } from 'lucide-react';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Dialog } from '../../../components/ui/Dialog';
@@ -9,6 +9,7 @@ import { useToast } from '../../../components/ui/Toast';
 import { ConfirmDeleteDialog } from '../../../components/ui/ConfirmDeleteDialog';
 import { getNegocios, updateNegocio, deleteNegocio, Negocio } from './service';
 import { createReservaComercial } from '../reservas-comerciales/service';
+import { getResidenciales, getProyectoConfigComercial, MontoReserva } from '../residenciales/service';
 
 type Stage = 'Interesado' | 'Contactado' | 'Visita Agendada' | 'Visita Realizada' | 'Cotización Formal Enviada';
 type ActivityType = 'Correo' | 'Llamada' | 'WhatsApp';
@@ -256,6 +257,14 @@ export function NegociosPage() {
   const [noteForm, setNoteForm] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Deal | null>(null);
 
+  // Reserva modal state
+  const [reservaTarget, setReservaTarget] = useState<Deal | null>(null);
+  const [montosDisponibles, setMontosDisponibles] = useState<MontoReserva[]>([]);
+  const [selectedMontoId, setSelectedMontoId] = useState<string>('');
+  const [montoLibre, setMontoLibre] = useState('');
+  const [loadingConfig, setLoadingConfig] = useState(false);
+  const [submittingReserva, setSubmittingReserva] = useState(false);
+
   useEffect(() => {
     loadDeals();
   }, []);
@@ -263,7 +272,8 @@ export function NegociosPage() {
   const loadDeals = async () => {
     setLoading(true);
     const negocios = await getNegocios();
-    setDeals(negocios.map(negocioToDeal));
+    // Filter out deals that have been converted to reservas
+    setDeals(negocios.filter(n => n.etapa !== 'Reserva Realizada').map(negocioToDeal));
     setLoading(false);
   };
 
@@ -339,26 +349,72 @@ export function NegociosPage() {
     setIsQuoteModalOpen(true);
   };
 
-  const handleMarkAsReserved = async (dealId: string) => {
+  const handleOpenReservaModal = async (dealId: string) => {
     const deal = deals.find(d => d.id === dealId);
     if (!deal) return;
+    setReservaTarget(deal);
+    setSelectedMontoId('');
+    setMontoLibre('');
+    setLoadingConfig(true);
 
+    // Try to find the residencial matching the deal's project name
+    const residenciales = await getResidenciales();
+    const matched = residenciales.find(r =>
+      r.nombre.toLowerCase().trim() === deal.proyecto.toLowerCase().trim()
+    );
+
+    if (matched) {
+      const config = await getProyectoConfigComercial(matched.id);
+      setMontosDisponibles(config?.montos_reserva || []);
+    } else {
+      setMontosDisponibles([]);
+    }
+    setLoadingConfig(false);
+  };
+
+  const handleConfirmReserva = async () => {
+    if (!reservaTarget) return;
+
+    let montoFinal = 0;
+    if (selectedMontoId) {
+      const monto = montosDisponibles.find(m => m.id === selectedMontoId);
+      if (monto) {
+        montoFinal = monto.tipo === 'porcentaje'
+          ? Math.round(reservaTarget.valor * monto.valor / 100)
+          : monto.valor;
+      }
+    } else if (montoLibre) {
+      montoFinal = parseFloat(montoLibre) || 0;
+    }
+
+    setSubmittingReserva(true);
     const result = await createReservaComercial({
-      negocio_id: deal.id,
-      prospecto: deal.prospecto,
-      email: deal.email,
-      telefono: deal.telefono,
-      unidad: deal.unidad,
-      proyecto: deal.proyecto,
-      tipo_interes: deal.tipoInteres,
-      valor: deal.valor,
+      negocio_id: reservaTarget.id,
+      prospecto: reservaTarget.prospecto,
+      email: reservaTarget.email,
+      telefono: reservaTarget.telefono,
+      unidad: reservaTarget.unidad,
+      proyecto: reservaTarget.proyecto,
+      tipo_interes: reservaTarget.tipoInteres,
+      valor: reservaTarget.valor,
+      monto_reserva: montoFinal,
     });
 
     if (result.success) {
-      showToast(`Reserva generada para "${deal.prospecto}". Visible en Reservas Comerciales.`, 'success');
+      // Mark negocio as Reserva Realizada in DB
+      await updateNegocio(reservaTarget.id, {
+        etapa: 'Reserva Realizada',
+        reserva_generada_at: new Date().toISOString(),
+      } as any);
+      // Remove card from kanban immediately
+      setDeals(prev => prev.filter(d => d.id !== reservaTarget.id));
+      if (selectedDeal?.id === reservaTarget.id) setSelectedDeal(null);
+      showToast(`Reserva generada para "${reservaTarget.prospecto}". Visible en Reservas Comerciales.`, 'success');
+      setReservaTarget(null);
     } else {
       showToast(result.error || 'Error al generar la reserva', 'error');
     }
+    setSubmittingReserva(false);
   };
 
   const getDealsByStage = (stage: Stage) => {
@@ -524,7 +580,7 @@ export function NegociosPage() {
                           className="w-full"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleMarkAsReserved(deal.id);
+                            handleOpenReservaModal(deal.id);
                           }}
                         >
                           <CheckCircle className="h-3 w-3 mr-1" />
@@ -926,6 +982,125 @@ export function NegociosPage() {
         onConfirm={handleDeleteDeal}
         itemName={deleteTarget ? `${deleteTarget.prospecto} - ${deleteTarget.proyecto}` : ''}
       />
+
+      {/* Reserva modal */}
+      {reservaTarget && (
+        <Dialog
+          isOpen={!!reservaTarget}
+          onClose={() => setReservaTarget(null)}
+          title="Generar Reserva Comercial"
+          size="lg"
+        >
+          <div className="space-y-5">
+            {/* Deal summary */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cliente</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{reservaTarget.prospecto}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Proyecto</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{reservaTarget.proyecto}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Unidad</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{reservaTarget.unidad || 'Por asignar'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Valor de la Unidad</p>
+                  <p className="font-semibold text-green-600 dark:text-green-400">${reservaTarget.valor.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Monto selection */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                <DollarSign className="w-4 h-4 inline mr-1 text-green-600" />
+                Monto de Reserva
+              </label>
+
+              {loadingConfig ? (
+                <div className="flex justify-center py-4">
+                  <div className="w-5 h-5 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : montosDisponibles.length > 0 ? (
+                <div className="space-y-2">
+                  {montosDisponibles.map(monto => {
+                    const calculado = monto.tipo === 'porcentaje'
+                      ? Math.round(reservaTarget.valor * monto.valor / 100)
+                      : monto.valor;
+                    return (
+                      <label
+                        key={monto.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                          selectedMontoId === monto.id
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="monto_reserva"
+                            value={monto.id}
+                            checked={selectedMontoId === monto.id}
+                            onChange={() => setSelectedMontoId(monto.id)}
+                            className="text-green-500"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {monto.etiqueta || (monto.tipo === 'porcentaje' ? `${monto.valor}% del valor` : `Q${monto.valor.toLocaleString()} fijo`)}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {monto.tipo === 'porcentaje' ? `${monto.valor}% del valor de la unidad` : 'Monto fijo'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                          Q{calculado.toLocaleString()}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                      Este proyecto no tiene montos de reserva configurados. Ingresa el monto manualmente o configura los montos en el panel de Residenciales.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Monto de reserva (Q)</label>
+                    <Input
+                      type="number"
+                      value={montoLibre}
+                      onChange={(e) => setMontoLibre(e.target.value)}
+                      placeholder="Ingresa el monto de reserva"
+                      min="0"
+                      step="100"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <Button variant="outline" onClick={() => setReservaTarget(null)}>Cancelar</Button>
+              <Button
+                onClick={handleConfirmReserva}
+                disabled={submittingReserva || (montosDisponibles.length > 0 && !selectedMontoId) || (montosDisponibles.length === 0 && !montoLibre)}
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {submittingReserva ? 'Generando...' : 'Confirmar Reserva'}
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
     </div>
   );
 }
