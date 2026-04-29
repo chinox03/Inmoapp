@@ -1,74 +1,19 @@
-import React, { useState } from 'react';
-import { ClipboardCheck, Upload, FileText, CheckCircle, User, Building, Calendar, DollarSign, Camera } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ClipboardCheck, Upload, FileText, CheckCircle, Building, Calendar, DollarSign, Camera } from 'lucide-react';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 import { Dialog } from '../../../components/ui/Dialog';
 import { Badge } from '../../../components/ui/Badge';
+import { useToast } from '../../../components/ui/Toast';
+import {
+  getReservasComerciales,
+  updateReservaComercial,
+  ReservaComercial,
+  ReservaComercialDocument,
+} from './service';
 
-interface Document {
-  id: string;
-  tipo: string;
-  nombre: string;
-  fechaCarga: string;
-  estado: 'Pendiente' | 'Aprobado' | 'Rechazado';
-}
-
-interface Reserva {
-  id: string;
-  prospecto: string;
-  unidad: string;
-  valor: number;
-  fechaReserva: string;
-  montoReserva: number;
-  documentos: Document[];
-  estado: 'Pendiente Documentos' | 'En Revisión' | 'Aprobada' | 'Lista para PCV';
-}
-
-const MOCK_RESERVAS: Reserva[] = [
-  {
-    id: '1',
-    prospecto: 'José Hernández',
-    unidad: 'Torre B - Apto 502',
-    valor: 145000,
-    fechaReserva: '2025-12-05',
-    montoReserva: 5000,
-    documentos: [
-      {
-        id: 'd1',
-        tipo: 'Cédula',
-        nombre: 'cedula_front.pdf',
-        fechaCarga: '2025-12-05',
-        estado: 'Aprobado',
-      },
-    ],
-    estado: 'Pendiente Documentos',
-  },
-  {
-    id: '2',
-    prospecto: 'Ana Martínez',
-    unidad: 'Casa 20',
-    valor: 195000,
-    fechaReserva: '2025-12-04',
-    montoReserva: 7500,
-    documentos: [
-      {
-        id: 'd2',
-        tipo: 'Cédula',
-        nombre: 'cedula_completa.pdf',
-        fechaCarga: '2025-12-04',
-        estado: 'Aprobado',
-      },
-      {
-        id: 'd3',
-        tipo: 'Comprobante de Pago',
-        nombre: 'comprobante_reserva.pdf',
-        fechaCarga: '2025-12-04',
-        estado: 'Aprobado',
-      },
-    ],
-    estado: 'En Revisión',
-  },
-];
+type Reserva = ReservaComercial;
+type Document = ReservaComercialDocument;
 
 const DOCUMENT_TYPES = [
   'Cédula (Frente)',
@@ -79,7 +24,9 @@ const DOCUMENT_TYPES = [
 ];
 
 export function ReservasComercialesPage() {
-  const [reservas, setReservas] = useState<Reserva[]>(MOCK_RESERVAS);
+  const { showToast } = useToast();
+  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedReserva, setSelectedReserva] = useState<Reserva | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadForm, setUploadForm] = useState({
@@ -87,6 +34,17 @@ export function ReservasComercialesPage() {
     archivo: null as File | null,
   });
   const [ocrData, setOcrData] = useState<any>(null);
+
+  useEffect(() => {
+    loadReservas();
+  }, []);
+
+  const loadReservas = async () => {
+    setLoading(true);
+    const data = await getReservasComerciales();
+    setReservas(data);
+    setLoading(false);
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -104,7 +62,7 @@ export function ReservasComercialesPage() {
     }
   };
 
-  const handleConfirmUpload = () => {
+  const handleConfirmUpload = async () => {
     if (!selectedReserva || !uploadForm.archivo) return;
 
     const newDocument: Document = {
@@ -115,26 +73,49 @@ export function ReservasComercialesPage() {
       estado: 'Pendiente',
     };
 
-    setReservas(reservas.map(reserva =>
-      reserva.id === selectedReserva.id
-        ? { ...reserva, documentos: [...reserva.documentos, newDocument] }
-        : reserva
-    ));
+    const updatedDocumentos = [...selectedReserva.documentos, newDocument];
+    const result = await updateReservaComercial(selectedReserva.id, {
+      documentos: updatedDocumentos,
+    });
+
+    if (result.success) {
+      setReservas(reservas.map(reserva =>
+        reserva.id === selectedReserva.id
+          ? { ...reserva, documentos: updatedDocumentos }
+          : reserva
+      ));
+      showToast('Documento cargado correctamente.', 'success');
+    } else {
+      showToast(result.error || 'Error al cargar el documento', 'error');
+    }
 
     setIsUploadModalOpen(false);
     setUploadForm({ tipo: DOCUMENT_TYPES[0], archivo: null });
     setOcrData(null);
   };
 
-  const handleMarkAsSuccessful = (reservaId: string) => {
+  const handleMarkAsSuccessful = async (reservaId: string) => {
     const reserva = reservas.find(r => r.id === reservaId);
-    if (reserva) {
-      alert(`Reserva de "${reserva.prospecto}" marcada como exitosa. Se moverá al módulo PCV.`);
+    if (!reserva) return;
+
+    const result = await updateReservaComercial(reservaId, { estado: 'Lista para PCV' });
+    if (result.success) {
       setReservas(reservas.map(r =>
         r.id === reservaId ? { ...r, estado: 'Lista para PCV' } : r
       ));
+      showToast(`Reserva de "${reserva.prospecto}" marcada como exitosa. Lista para PCV.`, 'success');
+    } else {
+      showToast(result.error || 'Error al actualizar la reserva', 'error');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -207,6 +188,16 @@ export function ReservasComercialesPage() {
         </Card>
       </div>
 
+      {reservas.length === 0 && (
+        <Card className="p-12 text-center">
+          <ClipboardCheck className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <p className="text-gray-500 dark:text-gray-400 font-medium">No hay reservas comerciales aun</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
+            Las reservas aparecen aqui cuando se genera una desde el modulo de Negocios.
+          </p>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {reservas.map((reserva) => (
           <Card key={reserva.id}>
@@ -241,7 +232,7 @@ export function ReservasComercialesPage() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">Fecha Reserva</p>
                   <div className="flex items-center mt-1">
                     <Calendar className="h-3 w-3 mr-1 text-gray-400" />
-                    <p className="text-sm text-gray-900 dark:text-gray-100">{reserva.fechaReserva}</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100">{reserva.fecha_reserva}</p>
                   </div>
                 </div>
                 <div>
@@ -249,7 +240,7 @@ export function ReservasComercialesPage() {
                   <div className="flex items-center mt-1">
                     <DollarSign className="h-3 w-3 mr-1 text-gray-400" />
                     <p className="text-sm text-gray-900 dark:text-gray-100">
-                      ${reserva.montoReserva.toLocaleString()}
+                      ${reserva.monto_reserva.toLocaleString()}
                     </p>
                   </div>
                 </div>

@@ -8,6 +8,7 @@ import { Badge } from '../../../components/ui/Badge';
 import { useToast } from '../../../components/ui/Toast';
 import { ConfirmDeleteDialog } from '../../../components/ui/ConfirmDeleteDialog';
 import { getNegocios, updateNegocio, deleteNegocio, Negocio } from './service';
+import { createReservaComercial } from '../reservas-comerciales/service';
 
 type Stage = 'Interesado' | 'Contactado' | 'Visita Agendada' | 'Visita Realizada' | 'Cotización Formal Enviada';
 type ActivityType = 'Correo' | 'Llamada' | 'WhatsApp';
@@ -338,10 +339,25 @@ export function NegociosPage() {
     setIsQuoteModalOpen(true);
   };
 
-  const handleMarkAsReserved = (dealId: string) => {
+  const handleMarkAsReserved = async (dealId: string) => {
     const deal = deals.find(d => d.id === dealId);
-    if (deal) {
-      showToast(`Negocio "${deal.prospecto}" marcado como reservado.`, 'success');
+    if (!deal) return;
+
+    const result = await createReservaComercial({
+      negocio_id: deal.id,
+      prospecto: deal.prospecto,
+      email: deal.email,
+      telefono: deal.telefono,
+      unidad: deal.unidad,
+      proyecto: deal.proyecto,
+      tipo_interes: deal.tipoInteres,
+      valor: deal.valor,
+    });
+
+    if (result.success) {
+      showToast(`Reserva generada para "${deal.prospecto}". Visible en Reservas Comerciales.`, 'success');
+    } else {
+      showToast(result.error || 'Error al generar la reserva', 'error');
     }
   };
 
