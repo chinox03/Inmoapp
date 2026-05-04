@@ -32,17 +32,31 @@ export interface UploadedFile {
   uploadedAt: string;
 }
 
+export interface TicketPendingItem {
+  id: string;
+  titulo: string;
+  categoria: string;
+  razon: string;
+  resuelto: boolean;
+}
+
 export interface Ticket {
   id: string;
   deliveryId: string;
   unitNumber: string;
   residencialName: string;
   residentName: string;
-  status: 'open' | 'in_progress' | 'resolved';
+  status: 'open' | 'in_progress' | 'resolved' | 'closed' | 'assigned';
   priority: 'low' | 'medium' | 'high';
-  pendingItems: string[];
+  pendingItems: (TicketPendingItem | string)[];
   createdAt: string;
   resolvedAt?: string;
+  numeroTicket?: string;
+  responsableId?: string | null;
+  responsableNombre?: string;
+  equipoAsignado?: string;
+  fechaCompromiso?: string | null;
+  descripcion?: string;
 }
 
 export interface DeliveryFormData {

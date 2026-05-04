@@ -34,6 +34,7 @@ const PCVPage = React.lazy(() => import('./app/modules/pcv/PCVPage').then(m => (
 const ComisionesPage = React.lazy(() => import('./app/modules/comisiones/ComisionesPage').then(m => ({ default: m.ComisionesPage })));
 const InsightsPage = React.lazy(() => import('./app/modules/insights/InsightsPage').then(m => ({ default: m.InsightsPage })));
 const MantenimientoPage = React.lazy(() => import('./app/modules/mantenimiento/MantenimientoPage').then(m => ({ default: m.MantenimientoPage })));
+const ConfiguracionEntregasPage = React.lazy(() => import('./app/modules/configuracion/ConfiguracionEntregasPage').then(m => ({ default: m.ConfiguracionEntregasPage })));
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-full min-h-[200px]">
@@ -121,6 +122,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredRoles={['SUPERADMIN', 'ADMIN_RESIDENCIAL']}>
                     <Suspense fallback={<PageLoader />}><InsightsPage /></Suspense>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="configuracion-entregas"
+                element={
+                  <ProtectedRoute requiredRoles={['SUPERADMIN', 'ADMIN_RESIDENCIAL']}>
+                    <Suspense fallback={<PageLoader />}><ConfiguracionEntregasPage /></Suspense>
                   </ProtectedRoute>
                 }
               />

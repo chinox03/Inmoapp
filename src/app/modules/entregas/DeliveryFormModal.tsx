@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { CheckItem, Delivery, Ticket, UploadedFile } from './types';
+import { CheckItem, Delivery, Ticket, TicketPendingItem, UploadedFile } from './types';
 import { getResidenciales, getResidentes } from './service';
 import { Button } from '../../../components/ui/Button';
 import { Input } from '../../../components/ui/Input';
@@ -119,14 +119,15 @@ export function DeliveryFormModal({ onClose, onSubmit }: DeliveryFormModalProps)
     let ticket: Ticket | undefined;
 
     if (hasIssues) {
-      const pendingItems = checklistItems
+      const pendingItems: TicketPendingItem[] = checklistItems
         .filter((item) => item.status === 'non_compliant' || item.status === 'with_observations')
-        .map((item) => {
-          if (item.observations) {
-            return `${item.label}: ${item.observations}`;
-          }
-          return item.label;
-        });
+        .map((item) => ({
+          id: item.id,
+          titulo: item.label,
+          categoria: item.status === 'non_compliant' ? 'No conforme' : 'Con observaciones',
+          razon: item.observations || '',
+          resuelto: false,
+        }));
 
       const highPriorityCount = checklistItems.filter(
         (item) => item.status === 'non_compliant'

@@ -198,6 +198,12 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
     icon: Wrench,
     roles: ['SUPERADMIN', 'ADMIN_RESIDENCIAL'],
   },
+  {
+    label: 'Config. Entregas',
+    path: '/dashboard/configuracion-entregas',
+    icon: PackageCheck,
+    roles: ['SUPERADMIN', 'ADMIN_RESIDENCIAL'],
+  },
 ];
 
 export const ROLE_COLORS: Record<UserRole, string> = {

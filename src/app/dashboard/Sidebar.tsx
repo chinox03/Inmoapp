@@ -71,6 +71,7 @@ const NAV_SECTIONS: NavSection[] = [
       '/dashboard/usuarios',
       '/dashboard/auditoria',
       '/dashboard/residenciales',
+      '/dashboard/configuracion-entregas',
     ],
   },
   {

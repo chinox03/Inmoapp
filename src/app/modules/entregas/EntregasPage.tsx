@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, PackageCheck, AlertTriangle, CheckCircle, Ticket as TicketIcon, RefreshCw, Loader2, Trash2 } from 'lucide-react';
-import { Delivery, Ticket } from './types';
+import { Plus, PackageCheck, AlertTriangle, CheckCircle, Ticket as TicketIcon, RefreshCw, Loader2, Trash2, Clock, UserCog } from 'lucide-react';
+import { Delivery } from './types';
 import { EntregaDB, EntregaTicketDB, getEntregas, getEntregaTickets, createEntrega, createEntregaTicket, deleteEntrega } from './service';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Button } from '../../../components/ui/Button';
@@ -10,7 +10,7 @@ import { DataTable } from '../../../components/ui/DataTable';
 import { ConfirmDeleteDialog } from '../../../components/ui/ConfirmDeleteDialog';
 import { useToast } from '../../../components/ui/Toast';
 import { DeliveryFormModal } from './DeliveryFormModal';
-import { TicketModal } from './TicketModal';
+import { TicketDetailModal } from './TicketDetailModal';
 import { format } from 'date-fns';
 
 function mapEntregaToDelivery(e: EntregaDB): Delivery {
@@ -32,28 +32,16 @@ function mapEntregaToDelivery(e: EntregaDB): Delivery {
   };
 }
 
-function mapTicketDB(t: EntregaTicketDB): Ticket {
-  return {
-    id: t.id,
-    deliveryId: t.entrega_id,
-    unitNumber: t.unidad,
-    residencialName: '',
-    residentName: t.residente_nombre,
-    status: t.estado,
-    priority: t.prioridad,
-    pendingItems: t.items_pendientes || [],
-    createdAt: t.created_at,
-    resolvedAt: t.resuelto_en || undefined,
-  };
-}
+type Tab = 'entregas' | 'tickets';
 
 export default function EntregasPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const [tab, setTab] = useState<Tab>('entregas');
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<EntregaTicketDB[]>([]);
   const [showFormModal, setShowFormModal] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<EntregaTicketDB | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Delivery | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -64,7 +52,7 @@ export default function EntregasPage() {
       getEntregaTickets(),
     ]);
     setDeliveries(entregasData.map(mapEntregaToDelivery));
-    setTickets(ticketsData.map(mapTicketDB));
+    setTickets(ticketsData);
     setLoading(false);
   };
 
@@ -76,10 +64,10 @@ export default function EntregasPage() {
     total: deliveries.length,
     completed: deliveries.filter((d) => d.status === 'completed').length,
     withIssues: deliveries.filter((d) => d.status === 'with_issues').length,
-    openTickets: tickets.filter((t) => t.status !== 'resolved').length,
+    openTickets: tickets.filter((t) => t.estado !== 'resolved' && t.estado !== 'closed').length,
   };
 
-  const handleSubmitDelivery = async (delivery: Delivery, ticket?: Ticket) => {
+  const handleSubmitDelivery = async (delivery: Delivery, ticket?: any) => {
     const result = await createEntrega({
       residencial_id: delivery.residencialId || null,
       unidad: delivery.unitNumber,
@@ -99,34 +87,33 @@ export default function EntregasPage() {
         entrega_id: result.data.id,
         unidad: ticket.unitNumber,
         residente_nombre: ticket.residentName,
-        estado: ticket.status,
+        estado: 'open',
         prioridad: ticket.priority,
         items_pendientes: ticket.pendingItems,
       }, user);
+      showToast('Entrega registrada y ticket de seguimiento creado', 'success');
+    } else if (result.success) {
+      showToast('Entrega registrada exitosamente', 'success');
     }
 
     setShowFormModal(false);
     loadData();
   };
 
-  const handleViewTicket = (ticketId: string) => {
-    const ticket = tickets.find((t) => t.id === ticketId);
-    if (ticket) {
-      setSelectedTicket(ticket);
-    }
-  };
+  const ticketsByDelivery = tickets.reduce<Record<string, EntregaTicketDB>>((acc, t) => {
+    acc[t.entrega_id] = t;
+    return acc;
+  }, {});
 
   const columns = [
     {
       key: 'deliveryDate',
-      label: 'Fecha de Entrega',
+      label: 'Fecha',
       sortable: true,
       render: (delivery: Delivery) => (
-        <div>
-          <p className="font-medium text-gray-900 dark:text-gray-100">
-            {delivery.deliveryDate ? format(new Date(delivery.deliveryDate), 'dd/MM/yyyy') : '-'}
-          </p>
-        </div>
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {delivery.deliveryDate ? format(new Date(delivery.deliveryDate), 'dd/MM/yyyy') : '-'}
+        </p>
       ),
     },
     {
@@ -143,7 +130,6 @@ export default function EntregasPage() {
     {
       key: 'residentName',
       label: 'Propietario',
-      sortable: true,
       render: (delivery: Delivery) => (
         <p className="text-sm text-gray-700 dark:text-gray-300">{delivery.residentName}</p>
       ),
@@ -151,24 +137,32 @@ export default function EntregasPage() {
     {
       key: 'status',
       label: 'Estado',
-      sortable: true,
       render: (delivery: Delivery) => {
         if (delivery.status === 'completed') {
-          return (
-            <Badge variant="success">
-              <CheckCircle className="h-3 w-3 mr-1 inline" />
-              Completada
-            </Badge>
-          );
+          return <Badge variant="success"><CheckCircle className="h-3 w-3 mr-1 inline" />Completada</Badge>;
         } else if (delivery.status === 'with_issues') {
-          return (
-            <Badge variant="warning">
-              <AlertTriangle className="h-3 w-3 mr-1 inline" />
-              Con Observaciones
-            </Badge>
-          );
+          return <Badge variant="warning"><AlertTriangle className="h-3 w-3 mr-1 inline" />Con Observaciones</Badge>;
         }
         return <Badge variant="default">Borrador</Badge>;
+      },
+    },
+    {
+      key: 'ticket',
+      label: 'Ticket',
+      render: (delivery: Delivery) => {
+        const t = ticketsByDelivery[delivery.id];
+        if (!t) return <span className="text-xs text-gray-400">-</span>;
+        const resuelto = t.estado === 'resolved' || t.estado === 'closed';
+        return (
+          <button
+            onClick={(e) => { e.stopPropagation(); setSelectedTicket(t); }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+          >
+            <TicketIcon className="h-3 w-3" />
+            {t.numero_ticket || 'Ticket'}
+            {resuelto ? ' - Resuelto' : ' - Abierto'}
+          </button>
+        );
       },
     },
     {
@@ -177,18 +171,11 @@ export default function EntregasPage() {
       render: (delivery: Delivery) => {
         const items = delivery.checklistItems || [];
         const total = items.length;
-        const compliant = items.filter(
-          (item: any) => item.status === 'compliant'
-        ).length;
-        const nonCompliant = items.filter(
-          (item: any) => item.status === 'non_compliant'
-        ).length;
-
+        const compliant = items.filter((item: any) => item.status === 'compliant').length;
+        const nonCompliant = items.filter((item: any) => item.status === 'non_compliant').length;
         return (
           <div className="text-sm">
-            <p className="text-gray-900 dark:text-gray-100 font-medium">
-              {compliant}/{total} conformes
-            </p>
+            <p className="text-gray-900 dark:text-gray-100 font-medium">{compliant}/{total} conformes</p>
             {nonCompliant > 0 && (
               <p className="text-red-600 dark:text-red-400">{nonCompliant} no conformes</p>
             )}
@@ -197,22 +184,103 @@ export default function EntregasPage() {
       },
     },
     {
-      key: 'createdBy',
-      label: 'Creado Por',
-      render: (delivery: Delivery) => (
-        <p className="text-sm text-gray-700 dark:text-gray-300">{delivery.createdBy || '-'}</p>
-      ),
-    },
-    {
       key: 'actions',
       label: 'Acciones',
       render: (delivery: Delivery) => (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setDeleteTarget(delivery)}
-        >
+        <Button size="sm" variant="outline" onClick={() => setDeleteTarget(delivery)}>
           <Trash2 className="h-4 w-4 text-red-600" />
+        </Button>
+      ),
+    },
+  ];
+
+  const ticketColumns = [
+    {
+      key: 'numero_ticket',
+      label: 'Ticket',
+      render: (t: EntregaTicketDB) => (
+        <p className="font-medium text-gray-900 dark:text-gray-100">{t.numero_ticket || t.id.slice(0, 8)}</p>
+      ),
+    },
+    {
+      key: 'unidad',
+      label: 'Unidad / Cliente',
+      render: (t: EntregaTicketDB) => (
+        <div>
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{t.unidad}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{t.residente_nombre}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'estado',
+      label: 'Estado',
+      render: (t: EntregaTicketDB) => {
+        switch (t.estado) {
+          case 'open':
+            return <Badge variant="info"><Clock className="h-3 w-3 mr-1 inline" />Abierto</Badge>;
+          case 'assigned':
+            return <Badge variant="info"><UserCog className="h-3 w-3 mr-1 inline" />Asignado</Badge>;
+          case 'in_progress':
+            return <Badge variant="warning">En Progreso</Badge>;
+          case 'resolved':
+            return <Badge variant="success">Resuelto</Badge>;
+          case 'closed':
+            return <Badge variant="default">Cerrado</Badge>;
+          default:
+            return <Badge variant="default">{t.estado}</Badge>;
+        }
+      },
+    },
+    {
+      key: 'prioridad',
+      label: 'Prioridad',
+      render: (t: EntregaTicketDB) =>
+        t.prioridad === 'high' ? <Badge variant="danger">Alta</Badge> :
+        t.prioridad === 'medium' ? <Badge variant="warning">Media</Badge> :
+        <Badge variant="default">Baja</Badge>,
+    },
+    {
+      key: 'responsable',
+      label: 'Responsable',
+      render: (t: EntregaTicketDB) => (
+        <div className="text-sm">
+          <p className="text-gray-900 dark:text-gray-100">{t.responsable_nombre || 'Sin asignar'}</p>
+          {t.equipo_asignado && <p className="text-xs text-gray-500 dark:text-gray-400">{t.equipo_asignado}</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'items',
+      label: 'Items',
+      render: (t: EntregaTicketDB) => {
+        const items = t.items_pendientes || [];
+        const total = items.length;
+        const resueltos = items.filter((it: any) => typeof it !== 'string' && it.resuelto).length;
+        return <p className="text-sm text-gray-700 dark:text-gray-300">{resueltos}/{total}</p>;
+      },
+    },
+    {
+      key: 'fecha_compromiso',
+      label: 'Compromiso',
+      render: (t: EntregaTicketDB) => {
+        if (!t.fecha_compromiso) return <span className="text-xs text-gray-400">-</span>;
+        const d = new Date(t.fecha_compromiso);
+        const vencido = d < new Date() && t.estado !== 'resolved' && t.estado !== 'closed';
+        return (
+          <p className={`text-sm ${vencido ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-300'}`}>
+            {format(d, 'dd/MM/yyyy')}
+            {vencido && ' (vencido)'}
+          </p>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      label: '',
+      render: (t: EntregaTicketDB) => (
+        <Button size="sm" variant="outline" onClick={() => setSelectedTicket(t)}>
+          Ver
         </Button>
       ),
     },
@@ -232,7 +300,7 @@ export default function EntregasPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Entrega de Unidades</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Gestion de entregas y control de calidad
+            Gestion de entregas y seguimiento de pendientes
           </p>
         </div>
         <div className="flex gap-2">
@@ -284,29 +352,55 @@ export default function EntregasPage() {
           </div>
         </Card>
 
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Tickets Abiertos</p>
-              <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{stats.openTickets}</p>
+        <button
+          onClick={() => setTab('tickets')}
+          className="text-left"
+        >
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Tickets Abiertos</p>
+                <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">{stats.openTickets}</p>
+              </div>
+              <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                <TicketIcon className="h-8 w-8 text-red-600 dark:text-red-400" />
+              </div>
             </div>
-            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-              <TicketIcon className="h-8 w-8 text-red-600 dark:text-red-400" />
-            </div>
-          </div>
-        </Card>
+          </Card>
+        </button>
       </div>
 
       <Card>
+        <div className="border-b border-gray-200 dark:border-gray-700 px-6">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setTab('entregas')}
+              className={`px-1 py-4 text-sm font-medium border-b-2 transition-colors ${
+                tab === 'entregas'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+            >
+              Entregas ({deliveries.length})
+            </button>
+            <button
+              onClick={() => setTab('tickets')}
+              className={`px-1 py-4 text-sm font-medium border-b-2 transition-colors ${
+                tab === 'tickets'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}
+            >
+              Tickets de Seguimiento ({tickets.length})
+            </button>
+          </div>
+        </div>
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Historial de Entregas
-          </h2>
-          <DataTable
-            data={deliveries}
-            columns={columns}
-            emptyMessage="No hay entregas registradas"
-          />
+          {tab === 'entregas' ? (
+            <DataTable data={deliveries} columns={columns} emptyMessage="No hay entregas registradas" />
+          ) : (
+            <DataTable data={tickets} columns={ticketColumns} emptyMessage="No hay tickets de seguimiento" />
+          )}
         </div>
       </Card>
 
@@ -318,9 +412,17 @@ export default function EntregasPage() {
       )}
 
       {selectedTicket && (
-        <TicketModal
+        <TicketDetailModal
           ticket={selectedTicket}
           onClose={() => setSelectedTicket(null)}
+          onUpdated={() => {
+            loadData();
+            // refresh modal data
+            getEntregaTickets().then((ts) => {
+              const updated = ts.find((t) => t.id === selectedTicket.id);
+              if (updated) setSelectedTicket(updated);
+            });
+          }}
         />
       )}
 

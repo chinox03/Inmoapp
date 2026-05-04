@@ -21,17 +21,53 @@ export interface EntregaDB {
   creador?: { nombre: string } | null;
 }
 
+export interface TicketItemPendiente {
+  id: string;
+  titulo: string;
+  categoria: string;
+  razon: string;
+  resuelto: boolean;
+}
+
+export interface TicketHistorialEntry {
+  id: string;
+  tipo: 'estado' | 'asignacion' | 'comentario' | 'creacion' | 'resolucion';
+  timestamp: string;
+  usuario: string;
+  from?: string;
+  to?: string;
+  notas?: string;
+}
+
 export interface EntregaTicketDB {
   id: string;
   entrega_id: string;
+  numero_ticket: string | null;
   unidad: string;
   residente_nombre: string;
-  estado: 'open' | 'in_progress' | 'resolved';
+  estado: 'open' | 'in_progress' | 'resolved' | 'closed' | 'assigned';
   prioridad: 'low' | 'medium' | 'high';
-  items_pendientes: string[];
+  items_pendientes: (TicketItemPendiente | string)[];
+  responsable_id: string | null;
+  responsable_nombre: string;
+  equipo_asignado: string;
+  fecha_compromiso: string | null;
+  fecha_resolucion: string | null;
+  descripcion: string;
+  historial: TicketHistorialEntry[];
   resuelto_en: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TicketComentario {
+  id: string;
+  ticket_id: string;
+  autor_id: string | null;
+  autor_nombre: string;
+  contenido: string;
+  tipo: string;
+  created_at: string;
 }
 
 export async function getEntregas(user: Profile | null): Promise<EntregaDB[]> {
@@ -108,20 +144,61 @@ export async function createEntrega(
   return { success: true, data };
 }
 
+function generateTicketNumber(): string {
+  const year = new Date().getFullYear();
+  const rnd = Math.floor(Math.random() * 9000 + 1000);
+  return `TKT-${year}-${rnd}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
 export async function createEntregaTicket(
   ticket: {
     entrega_id: string;
     unidad: string;
     residente_nombre: string;
     estado: string;
-    prioridad: string;
-    items_pendientes: string[];
+    prioridad: 'low' | 'medium' | 'high';
+    items_pendientes: TicketItemPendiente[];
+    descripcion?: string;
   },
   user: Profile | null
 ) {
+  // Fetch SLA to auto-suggest compromise date
+  const { data: config } = await supabase
+    .from('configuracion_entregas')
+    .select('sla_por_prioridad')
+    .maybeSingle();
+
+  const sla = (config?.sla_por_prioridad as Record<string, number>) || { high: 3, medium: 7, low: 14 };
+  const slaDays = sla[ticket.prioridad] ?? 7;
+  const fechaCompromiso = addDays(new Date(), slaDays).toISOString().split('T')[0];
+
+  const numeroTicket = generateTicketNumber();
+
+  const historial: TicketHistorialEntry[] = [
+    {
+      id: crypto.randomUUID(),
+      tipo: 'creacion',
+      timestamp: new Date().toISOString(),
+      usuario: user?.nombre || 'Sistema',
+      notas: `Ticket creado automaticamente desde entrega con ${ticket.items_pendientes.length} items pendientes.`,
+    },
+  ];
+
   const { data, error } = await supabase
     .from('entregas_tickets')
-    .insert([ticket])
+    .insert([{
+      ...ticket,
+      numero_ticket: numeroTicket,
+      fecha_compromiso: fechaCompromiso,
+      descripcion: ticket.descripcion || '',
+      historial,
+    }])
     .select()
     .maybeSingle();
 
@@ -140,6 +217,100 @@ export async function createEntregaTicket(
   }
 
   return { success: true, data };
+}
+
+export async function updateEntregaTicket(
+  id: string,
+  updates: Partial<{
+    estado: string;
+    prioridad: string;
+    responsable_id: string | null;
+    responsable_nombre: string;
+    equipo_asignado: string;
+    fecha_compromiso: string | null;
+    fecha_resolucion: string | null;
+    descripcion: string;
+    items_pendientes: TicketItemPendiente[];
+    historial: TicketHistorialEntry[];
+    resuelto_en: string | null;
+  }>,
+  user: Profile | null
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('entregas_tickets')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  if (user) {
+    await logAuditEvent({
+      userId: user.id,
+      entidad: 'entregas_tickets',
+      entidadId: id,
+      accion: 'UPDATE',
+      diff: updates,
+    });
+  }
+
+  return { success: true };
+}
+
+export async function getTicketComentarios(ticketId: string): Promise<TicketComentario[]> {
+  const { data, error } = await supabase
+    .from('entregas_ticket_comentarios')
+    .select('*')
+    .eq('ticket_id', ticketId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Error fetching comentarios:', error);
+    return [];
+  }
+
+  return (data || []) as TicketComentario[];
+}
+
+export async function addTicketComentario(
+  ticketId: string,
+  contenido: string,
+  user: Profile | null,
+  tipo: string = 'comentario'
+): Promise<{ success: boolean; data?: TicketComentario; error?: string }> {
+  const { data, error } = await supabase
+    .from('entregas_ticket_comentarios')
+    .insert([{
+      ticket_id: ticketId,
+      autor_id: user?.id || null,
+      autor_nombre: user?.nombre || 'Sistema',
+      contenido,
+      tipo,
+    }])
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, data: data as TicketComentario };
+}
+
+export async function getUsuariosAsignables(): Promise<{ id: string; nombre: string; rol: string }[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, nombre, rol')
+    .in('rol', ['SUPERADMIN', 'ADMIN_RESIDENCIAL', 'IT', 'SEGURIDAD'])
+    .order('nombre');
+
+  if (error) {
+    console.error('Error fetching usuarios:', error);
+    return [];
+  }
+
+  return (data || []) as { id: string; nombre: string; rol: string }[];
 }
 
 export async function deleteEntrega(
