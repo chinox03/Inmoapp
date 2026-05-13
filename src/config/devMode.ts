@@ -1,6 +1,6 @@
 import { User, UserRole } from '../types/database.types';
 
-export const DEV_MODE_ENABLED = true;
+export const DEV_MODE_ENABLED = import.meta.env.VITE_DEV_MODE === 'true';
 
 export const DEV_ROLE: UserRole = 'SUPERADMIN';
 
